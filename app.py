@@ -714,25 +714,15 @@ def render_connected():
         process_audio(audio_bytes)
         st.rerun()
     
-    # TTS 오디오 자동 재생 (브라우저 - JavaScript 강제 재생)
+    # TTS 오디오 자동 재생 (브라우저)
     if st.session_state.tts_audio:
         audio_b64 = base64.b64encode(st.session_state.tts_audio).decode()
         st.markdown(f'''
-            <audio id="tts-audio" style="display:none;">
+            <audio autoplay>
                 <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
             </audio>
-            <script>
-                (function() {{
-                    var audio = document.getElementById('tts-audio');
-                    if (audio) {{
-                        audio.play().catch(function(e) {{
-                            console.log('Autoplay blocked:', e);
-                        }});
-                    }}
-                }})();
-            </script>
         ''', unsafe_allow_html=True)
-        st.session_state.tts_audio = None
+        st.session_state.tts_audio = None  # 재생 후 초기화
     
     # 종료 버튼
     col1, col2, col3 = st.columns([1, 2, 1])

@@ -1,0 +1,158 @@
+# 🤖 Haii-Call
+
+**경도인지장애 어르신 일상 음성 동반자**
+
+실시간 영상통화 기반 AI 건강 도우미 시스템
+
+---
+
+## ✨ 주요 기능
+
+| 기능 | 설명 |
+|------|------|
+| 📹 **실시간 영상** | WebRTC 기반 웹캠 스트리밍 |
+| 👤 **얼굴 인식** | OpenCV로 실시간 얼굴 감지 |
+| 🎤 **음성 인식** | Deepgram STT (한국어) |
+| 🧠 **AI 대화** | Gemini 2.0 자연어 대화 |
+| 🔊 **음성 합성** | Edge TTS 한국어 음성 |
+
+---
+
+## ⚠️ 필수 요구사항
+
+### Python 3.11 (필수!)
+
+> **Python 3.14, 3.13은 호환되지 않습니다!**
+
+**다운로드**: https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
+
+설치 시 **"Add Python to PATH"** 반드시 체크!
+
+---
+
+## 🚀 설치 및 실행 (PowerShell)
+
+### 1단계: 로컬 폴더로 복사 (권장)
+
+```powershell
+mkdir C:\haii-call
+Copy-Item "다운로드\haii-call\*" "C:\haii-call\" -Recurse
+cd C:\haii-call
+```
+
+### 2단계: 가상환경 생성
+
+```powershell
+python -m venv venv
+```
+
+### 3단계: 가상환경 활성화
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+> ⚠️ 권한 오류 시:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+
+### 4단계: 패키지 설치
+
+```powershell
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 5단계: 실행
+
+```powershell
+streamlit run app.py
+```
+
+브라우저에서 **http://localhost:8501** 자동 열림!
+
+---
+
+## 📋 매번 실행할 때
+
+```powershell
+cd C:\haii-call
+.\venv\Scripts\Activate.ps1
+streamlit run app.py
+```
+
+---
+
+## 🔑 API 키 설정 (선택)
+
+`.env` 파일 수정:
+
+```env
+# Google AI Studio: https://aistudio.google.com/apikey
+GOOGLE_API_KEY=your_google_api_key
+
+# Deepgram: https://console.deepgram.com/
+DEEPGRAM_API_KEY=your_deepgram_api_key
+```
+
+**API 키가 없어도 데모 모드로 작동합니다!**
+
+---
+
+## 📁 파일 구조
+
+```
+haii-call/
+├── app.py            # 메인 UI (Streamlit)
+├── STT.py            # 음성 인식 (Deepgram)
+├── LLM.py            # 대화 생성 (Gemini)
+├── TTS.py            # 음성 합성 (Edge TTS)
+├── requirements.txt  # 의존성 패키지
+├── .env              # API 키
+└── README.md         # 이 파일
+```
+
+---
+
+## 🔧 문제 해결
+
+| 문제 | 해결 |
+|------|------|
+| `streamlit 찾을 수 없음` | 가상환경 활성화: `.\venv\Scripts\Activate.ps1` |
+| `권한 오류` | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
+| `카메라 안됨` | 브라우저에서 카메라 권한 허용 |
+| `numpy 설치 실패` | Python 3.11 확인: `python --version` |
+| `음성 인식 안됨` | .env에 DEEPGRAM_API_KEY 설정 |
+
+---
+
+## 🔄 전체 흐름
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   마이크    │ ──> │   Deepgram  │ ──> │   Gemini    │
+│   (녹음)    │     │   (STT)     │     │   (LLM)     │
+└─────────────┘     └─────────────┘     └─────────────┘
+                                              │
+                                              ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   스피커    │ <── │  Edge TTS   │ <── │   응답      │
+│   (재생)    │     │   (TTS)     │     │   텍스트    │
+└─────────────┘     └─────────────┘     └─────────────┘
+
+
+```
+
+---
+
+## 📊 복약 정보 (기본 설정)
+
+| 시간 | 약 종류 |
+|------|---------|
+| 아침 (식후 30분) | 혈압약, 당뇨약, 종합비타민 |
+| 저녁 (식후 30분) | 혈압약, 콘드로이친, 고지혈증약 |
+
+---
+
+**2026 경험공학 아카데미** - 윤태원, 박채윤

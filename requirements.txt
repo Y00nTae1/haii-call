@@ -1,0 +1,31 @@
+# ═══════════════════════════════════════════
+# Haii-Call 의존성 패키지
+# Python 3.11 필수!
+# ═══════════════════════════════════════════
+
+# AI - 대화 생성
+google-generativeai==0.8.3
+
+# STT - 음성 인식
+deepgram-sdk==3.7.7
+
+# TTS - 음성 합성  
+edge-tts==6.1.12
+
+# 영상 처리
+opencv-python==4.10.0.84
+numpy==1.26.4
+
+# UI
+streamlit==1.40.1
+streamlit-webrtc==0.47.1
+
+# 오디오 녹음
+audio-recorder-streamlit==0.0.10
+
+# 비디오 처리
+av==12.0.0
+
+# 유틸리티
+python-dotenv==1.0.1
+aiohttp==3.9.5

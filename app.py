@@ -14,6 +14,7 @@ import streamlit as st
 import time
 import logging
 import threading
+import base64
 from html import escape
 from dotenv import load_dotenv
 
@@ -417,6 +418,7 @@ def init_session():
         'messages': [],
         'start_time': None,
         'last_audio': None,
+        'tts_audio': None,         # TTS 오디오 (브라우저 재생용)
         'live_text': '',
         'loading_started_at': None,
         'accepted_started_at': None,
@@ -523,20 +525,17 @@ def process_audio(audio_bytes: bytes):
     
     st.session_state.messages.append({'role': 'ai', 'text': response})
     
-    # TTS - 음성 합성 및 재생 (백그라운드)
-    def play_response():
-        try:
-            audio = asyncio.run(tts.synthesize(response))
-            if audio:
-                tts.play_audio(audio)
-        except Exception as e:
-            logging.error(f"TTS 재생 오류: {e}")
-        finally:
-            st.session_state.ai_state = 'idle'
-            st.session_state.live_text = ""
-    
+    # TTS - 음성 합성 (브라우저에서 재생)
     st.session_state.ai_state = 'speaking'
-    threading.Thread(target=play_response, daemon=True).start()
+    try:
+        audio = asyncio.run(tts.synthesize(response))
+        if audio:
+            st.session_state.tts_audio = audio
+    except Exception as e:
+        logging.error(f"TTS 합성 오류: {e}")
+    finally:
+        st.session_state.ai_state = 'idle'
+        st.session_state.live_text = ""
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -625,9 +624,9 @@ def render_connecting_call():
             try:
                 audio = asyncio.run(tts.synthesize(greeting))
                 if audio:
-                    tts.play_audio(audio)
+                    st.session_state.tts_audio = audio  # 브라우저에서 재생
             except Exception as e:
-                logging.error(f"인사말 재생 오류: {e}")
+                logging.error(f"인사말 합성 오류: {e}")
         
         st.session_state.greeting_done = True
         st.session_state.state = 'connected'
@@ -714,6 +713,16 @@ def render_connected():
         st.session_state.last_audio = audio_bytes
         process_audio(audio_bytes)
         st.rerun()
+    
+    # TTS 오디오 자동 재생 (브라우저)
+    if st.session_state.tts_audio:
+        audio_b64 = base64.b64encode(st.session_state.tts_audio).decode()
+        st.markdown(f'''
+            <audio autoplay>
+                <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
+            </audio>
+        ''', unsafe_allow_html=True)
+        st.session_state.tts_audio = None  # 재생 후 초기화
     
     # 종료 버튼
     col1, col2, col3 = st.columns([1, 2, 1])

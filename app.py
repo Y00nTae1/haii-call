@@ -244,10 +244,11 @@ def page_call():
             html.append(f'<div class="msg msg-ai"><div class="msg-label">🤖 하이</div><div class="bubble bubble-ai">{t}</div></div>')
     st.markdown(f'<div class="chat">{"".join(html)}</div>', unsafe_allow_html=True)
     
-    # 마지막 AI 메시지 (TTS용)
+    # 마지막 AI 메시지 (TTS용) - 백틱 이스케이프 처리
     last_ai = ""
     if st.session_state.messages and st.session_state.messages[-1]['role'] == 'ai':
         last_ai = st.session_state.messages[-1]['text']
+    last_ai_escaped = escape(last_ai).replace("`", "'")
     
     # ═══════════════════════════════════════════════════════════════════
     # 음성 UI (components.html 사용)
@@ -382,7 +383,7 @@ def page_call():
             
             // TTS 실행
             if (window.speechSynthesis) {{
-                const lastMsg = `{escape(last_ai).replace("`", "\\`")}`;
+                const lastMsg = `{last_ai_escaped}`;
                 speechSynthesis.onvoiceschanged = () => speak(lastMsg);
                 if (speechSynthesis.getVoices().length) speak(lastMsg);
                 setTimeout(() => speak(lastMsg), 300);

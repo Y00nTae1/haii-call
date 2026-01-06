@@ -1,8 +1,8 @@
 """
 app.py - Haii-Call 음성 대화 앱
-Web Speech API 기반 실시간 음성 대화
 """
 import streamlit as st
+import streamlit.components.v1 as components
 import time
 from html import escape
 from dotenv import load_dotenv
@@ -66,17 +66,11 @@ st.markdown("""
     .name { color: white; font-size: 24px; font-weight: 700; }
     .role { color: #9ca3af; font-size: 14px; margin-top: 4px; }
     
-    /* 상태 표시 */
-    .state { text-align: center; padding: 12px 0; font-size: 15px; color: #9ca3af; }
-    .state.listening { color: #3b82f6; }
-    .state.thinking { color: #a855f7; }
-    .state.speaking { color: #22c55e; }
-    
     /* 대화창 */
     .chat {
         background: rgba(255,255,255,0.03);
         border-radius: 20px; padding: 16px;
-        margin: 12px 0; min-height: 160px; max-height: 45vh;
+        margin: 12px 0; min-height: 120px; max-height: 35vh;
         overflow-y: auto;
     }
     .msg { margin: 12px 0; display: flex; flex-direction: column; }
@@ -95,33 +89,6 @@ st.markdown("""
         background: rgba(255,255,255,0.08);
         color: white; border-bottom-left-radius: 6px;
     }
-    
-    /* 실시간 텍스트 */
-    .live { text-align: center; color: #60a5fa; font-size: 14px; min-height: 20px; padding: 8px 0; }
-    
-    /* 마이크 버튼 */
-    .mic-area { text-align: center; padding: 16px 0; }
-    .mic {
-        width: 88px; height: 88px;
-        border-radius: 50%; border: none;
-        background: linear-gradient(135deg, #22c55e, #16a34a);
-        box-shadow: 0 8px 24px rgba(34, 197, 94, 0.4);
-        cursor: pointer; transition: all 0.2s;
-        display: inline-flex; align-items: center; justify-content: center;
-    }
-    .mic:hover { transform: scale(1.05); }
-    .mic:active { transform: scale(0.95); }
-    .mic.on {
-        background: linear-gradient(135deg, #ef4444, #dc2626);
-        box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4);
-        animation: rec 1s ease-in-out infinite;
-    }
-    @keyframes rec {
-        0%,100% { box-shadow: 0 8px 24px rgba(239,68,68,0.4); }
-        50% { box-shadow: 0 12px 32px rgba(239,68,68,0.6); }
-    }
-    .mic svg { width: 40px; height: 40px; fill: white; }
-    .hint { color: #6b7280; font-size: 13px; margin-top: 12px; }
     
     /* 버튼 */
     .stButton > button {
@@ -156,6 +123,15 @@ st.markdown("""
     @keyframes ring {
         0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); transform: scale(1); }
         50% { box-shadow: 0 0 0 24px rgba(34,197,94,0); transform: scale(1.03); }
+    }
+    
+    /* 텍스트 입력 */
+    .stTextInput > div > div > input {
+        background: #1f2937 !important;
+        border: 1px solid #374151 !important;
+        border-radius: 12px !important;
+        color: white !important;
+        padding: 12px 16px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -273,22 +249,55 @@ def page_call():
     if st.session_state.messages and st.session_state.messages[-1]['role'] == 'ai':
         last_ai = st.session_state.messages[-1]['text']
     
-    # 음성 UI
-    st.markdown(f'''
+    # ═══════════════════════════════════════════════════════════════════
+    # 음성 UI (components.html 사용)
+    # ═══════════════════════════════════════════════════════════════════
+    speech_html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; font-family: 'Noto Sans KR', sans-serif; }}
+            body {{ background: transparent; text-align: center; padding: 10px; }}
+            .state {{ font-size: 14px; color: #9ca3af; margin-bottom: 8px; }}
+            .state.listening {{ color: #3b82f6; }}
+            .state.thinking {{ color: #a855f7; }}
+            .state.speaking {{ color: #22c55e; }}
+            .live {{ color: #60a5fa; font-size: 13px; min-height: 18px; margin-bottom: 12px; }}
+            .mic {{
+                width: 80px; height: 80px;
+                border-radius: 50%; border: none;
+                background: linear-gradient(135deg, #22c55e, #16a34a);
+                box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+                cursor: pointer; transition: all 0.2s;
+                display: inline-flex; align-items: center; justify-content: center;
+            }}
+            .mic:hover {{ transform: scale(1.05); }}
+            .mic.on {{
+                background: linear-gradient(135deg, #ef4444, #dc2626);
+                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+                animation: pulse 1s ease-in-out infinite;
+            }}
+            @keyframes pulse {{
+                0%,100% {{ box-shadow: 0 6px 20px rgba(239,68,68,0.4); }}
+                50% {{ box-shadow: 0 10px 28px rgba(239,68,68,0.6); }}
+            }}
+            .mic svg {{ width: 36px; height: 36px; fill: white; }}
+            .hint {{ color: #6b7280; font-size: 12px; margin-top: 10px; }}
+        </style>
+    </head>
+    <body>
         <div class="state" id="state">💬 마이크를 누르고 말씀하세요</div>
         <div class="live" id="live"></div>
-        <div class="mic-area">
-            <button class="mic" id="mic" onclick="toggle()">
-                <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
-            </button>
-            <div class="hint">버튼을 누르고 말씀하세요</div>
-        </div>
+        <button class="mic" id="mic" onclick="toggle()">
+            <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
+        </button>
+        <div class="hint">버튼을 누르고 말씀하세요</div>
         
         <script>
             let rec = null, on = false, txt = '';
-            
-            // Edge, Chrome 둘 다 지원
             const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            
             if (SR) {{
                 rec = new SR();
                 rec.lang = 'ko-KR';
@@ -313,34 +322,27 @@ def page_call():
                 }};
                 
                 rec.onerror = e => {{
-                    console.log('음성 인식 오류:', e.error);
-                    if (e.error === 'not-allowed') {{
-                        alert('마이크 권한을 허용해주세요!');
-                    }}
+                    console.log('STT 오류:', e.error);
                     on = false;
                     document.getElementById('mic').classList.remove('on');
+                    document.getElementById('state').textContent = '⚠️ 음성 인식 오류 - 텍스트로 입력하세요';
                 }};
+            }} else {{
+                document.getElementById('state').textContent = '⚠️ 음성 인식 미지원 - 텍스트로 입력하세요';
             }}
             
             function toggle() {{
+                if (!rec) return;
                 if (on) stop(); else start();
             }}
             
             function start() {{
-                if (!rec) {{
-                    alert('이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge를 사용해주세요.');
-                    return;
-                }}
                 on = true; txt = '';
                 document.getElementById('mic').classList.add('on');
                 document.getElementById('state').textContent = '👂 듣고 있어요...';
                 document.getElementById('state').className = 'state listening';
                 document.getElementById('live').textContent = '';
-                try {{
-                    rec.start();
-                }} catch(e) {{
-                    console.log('시작 오류:', e);
-                }}
+                try {{ rec.start(); }} catch(e) {{ console.log(e); }}
             }}
             
             function stop() {{
@@ -348,15 +350,14 @@ def page_call():
                 document.getElementById('mic').classList.remove('on');
                 document.getElementById('state').textContent = '🧠 생각하고 있어요...';
                 document.getElementById('state').className = 'state thinking';
-                if (rec) {{
-                    try {{ rec.stop(); }} catch(e) {{}}
-                }}
+                try {{ rec.stop(); }} catch(e) {{}}
             }}
             
             function send(t) {{
-                const u = new URL(location.href);
-                u.searchParams.set('q', encodeURIComponent(t));
-                location.href = u;
+                // 부모 창의 URL 변경
+                const url = new URL(window.parent.location.href);
+                url.searchParams.set('q', encodeURIComponent(t));
+                window.parent.location.href = url.toString();
             }}
             
             // TTS
@@ -364,7 +365,8 @@ def page_call():
                 if (!t || !window.speechSynthesis) return;
                 speechSynthesis.cancel();
                 const u = new SpeechSynthesisUtterance(t);
-                u.lang = 'ko-KR'; u.rate = 0.9;
+                u.lang = 'ko-KR';
+                u.rate = 0.9;
                 const v = speechSynthesis.getVoices().find(x => x.lang.includes('ko'));
                 if (v) u.voice = v;
                 u.onstart = () => {{
@@ -378,16 +380,37 @@ def page_call():
                 speechSynthesis.speak(u);
             }}
             
-            // 음성 로드 후 TTS 실행
+            // TTS 실행
             if (window.speechSynthesis) {{
-                speechSynthesis.onvoiceschanged = () => speak(`{escape(last_ai)}`);
-                if (speechSynthesis.getVoices().length) speak(`{escape(last_ai)}`);
-                setTimeout(() => speak(`{escape(last_ai)}`), 500);
+                const lastMsg = `{escape(last_ai).replace("`", "\\`")}`;
+                speechSynthesis.onvoiceschanged = () => speak(lastMsg);
+                if (speechSynthesis.getVoices().length) speak(lastMsg);
+                setTimeout(() => speak(lastMsg), 300);
             }}
         </script>
-    ''', unsafe_allow_html=True)
+    </body>
+    </html>
+    '''
     
-    # 사용자 입력 처리
+    components.html(speech_html, height=200)
+    
+    # ═══════════════════════════════════════════════════════════════════
+    # 텍스트 입력 (음성 안 될 때 대안)
+    # ═══════════════════════════════════════════════════════════════════
+    st.markdown("<p style='color:#6b7280;font-size:12px;text-align:center;margin-top:8px;'>음성이 안 되면 아래에 입력하세요</p>", unsafe_allow_html=True)
+    
+    text_input = st.text_input("메시지 입력", placeholder="여기에 입력하고 Enter...", label_visibility="collapsed", key="text_msg")
+    
+    if text_input:
+        st.session_state.messages.append({'role': 'user', 'text': text_input})
+        llm = get_llm()
+        if llm:
+            resp = llm.generate(text_input)
+            if resp:
+                st.session_state.messages.append({'role': 'ai', 'text': resp})
+        st.rerun()
+    
+    # URL 파라미터로 들어온 음성 입력 처리
     q = st.query_params.get('q', '')
     if q:
         import urllib.parse

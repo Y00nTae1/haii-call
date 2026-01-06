@@ -287,8 +287,10 @@ def page_call():
         <script>
             let rec = null, on = false, txt = '';
             
-            if ('webkitSpeechRecognition' in window) {{
-                rec = new webkitSpeechRecognition();
+            // Edge, Chrome 둘 다 지원
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SR) {{
+                rec = new SR();
                 rec.lang = 'ko-KR';
                 rec.continuous = true;
                 rec.interimResults = true;
@@ -303,8 +305,20 @@ def page_call():
                 }};
                 
                 rec.onend = () => {{
-                    if (on) rec.start();
-                    else if (txt.trim()) send(txt.trim());
+                    if (on) {{
+                        try {{ rec.start(); }} catch(e) {{}}
+                    }} else if (txt.trim()) {{
+                        send(txt.trim());
+                    }}
+                }};
+                
+                rec.onerror = e => {{
+                    console.log('음성 인식 오류:', e.error);
+                    if (e.error === 'not-allowed') {{
+                        alert('마이크 권한을 허용해주세요!');
+                    }}
+                    on = false;
+                    document.getElementById('mic').classList.remove('on');
                 }};
             }}
             
@@ -313,13 +327,20 @@ def page_call():
             }}
             
             function start() {{
-                if (!rec) return alert('이 브라우저는 음성 인식을 지원하지 않습니다.');
+                if (!rec) {{
+                    alert('이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge를 사용해주세요.');
+                    return;
+                }}
                 on = true; txt = '';
                 document.getElementById('mic').classList.add('on');
                 document.getElementById('state').textContent = '👂 듣고 있어요...';
                 document.getElementById('state').className = 'state listening';
                 document.getElementById('live').textContent = '';
-                rec.start();
+                try {{
+                    rec.start();
+                }} catch(e) {{
+                    console.log('시작 오류:', e);
+                }}
             }}
             
             function stop() {{
@@ -327,7 +348,9 @@ def page_call():
                 document.getElementById('mic').classList.remove('on');
                 document.getElementById('state').textContent = '🧠 생각하고 있어요...';
                 document.getElementById('state').className = 'state thinking';
-                if (rec) rec.stop();
+                if (rec) {{
+                    try {{ rec.stop(); }} catch(e) {{}}
+                }}
             }}
             
             function send(t) {{
@@ -338,7 +361,7 @@ def page_call():
             
             // TTS
             function speak(t) {{
-                if (!t || !speechSynthesis) return;
+                if (!t || !window.speechSynthesis) return;
                 speechSynthesis.cancel();
                 const u = new SpeechSynthesisUtterance(t);
                 u.lang = 'ko-KR'; u.rate = 0.9;
@@ -356,8 +379,11 @@ def page_call():
             }}
             
             // 음성 로드 후 TTS 실행
-            speechSynthesis.onvoiceschanged = () => speak(`{escape(last_ai)}`);
-            if (speechSynthesis.getVoices().length) speak(`{escape(last_ai)}`);
+            if (window.speechSynthesis) {{
+                speechSynthesis.onvoiceschanged = () => speak(`{escape(last_ai)}`);
+                if (speechSynthesis.getVoices().length) speak(`{escape(last_ai)}`);
+                setTimeout(() => speak(`{escape(last_ai)}`), 500);
+            }}
         </script>
     ''', unsafe_allow_html=True)
     

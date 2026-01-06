@@ -1,13 +1,23 @@
 """
 app.py - Haii-Call 음성 대화 앱
+Deepgram STT + Edge TTS
 """
 import streamlit as st
-import streamlit.components.v1 as components
+import asyncio
+import sys
 import time
+import base64
 from html import escape
 from dotenv import load_dotenv
 
+# Windows 이벤트 루프 정책
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+from audio_recorder_streamlit import audio_recorder
+from STT import STT
 from LLM import LLM
+from TTS import TTS
 
 load_dotenv()
 
@@ -66,6 +76,12 @@ st.markdown("""
     .name { color: white; font-size: 24px; font-weight: 700; }
     .role { color: #9ca3af; font-size: 14px; margin-top: 4px; }
     
+    /* 상태 표시 */
+    .ai-state { text-align: center; padding: 12px 0; font-size: 15px; color: #9ca3af; }
+    .ai-state.listening { color: #3b82f6; }
+    .ai-state.thinking { color: #a855f7; }
+    .ai-state.speaking { color: #22c55e; }
+    
     /* 대화창 */
     .chat {
         background: rgba(255,255,255,0.03);
@@ -89,6 +105,29 @@ st.markdown("""
         background: rgba(255,255,255,0.08);
         color: white; border-bottom-left-radius: 6px;
     }
+    
+    /* 마이크 버튼 스타일 */
+    .stAudioRecorder {
+        display: flex !important;
+        justify-content: center !important;
+        padding: 16px 0 !important;
+    }
+    .stAudioRecorder > div { background: transparent !important; }
+    .stAudioRecorder button {
+        width: 80px !important; height: 80px !important;
+        border-radius: 50% !important;
+        background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+        border: none !important;
+        box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4) !important;
+    }
+    .stAudioRecorder button:hover {
+        transform: scale(1.05) !important;
+    }
+    .stAudioRecorder button svg {
+        width: 36px !important; height: 36px !important;
+        fill: white !important;
+    }
+    .stAudioRecorder audio { display: none !important; }
     
     /* 버튼 */
     .stButton > button {
@@ -125,14 +164,10 @@ st.markdown("""
         50% { box-shadow: 0 0 0 24px rgba(34,197,94,0); transform: scale(1.03); }
     }
     
-    /* 텍스트 입력 */
-    .stTextInput > div > div > input {
-        background: #1f2937 !important;
-        border: 1px solid #374151 !important;
-        border-radius: 12px !important;
-        color: white !important;
-        padding: 12px 16px !important;
-    }
+    /* 오디오 플레이어 숨김 */
+    .stAudio { display: none !important; }
+    
+    .hint { color: #6b7280; font-size: 13px; text-align: center; margin-top: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -145,14 +180,34 @@ if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'start_time' not in st.session_state:
     st.session_state.start_time = None
+if 'last_audio' not in st.session_state:
+    st.session_state.last_audio = None
+if 'tts_audio' not in st.session_state:
+    st.session_state.tts_audio = None
+if 'tts_key' not in st.session_state:
+    st.session_state.tts_key = 0
 
 # ═══════════════════════════════════════════════════════════════════════════
-# LLM
+# 모듈 로드
 # ═══════════════════════════════════════════════════════════════════════════
+@st.cache_resource(show_spinner=False)
+def get_stt():
+    try:
+        return STT()
+    except:
+        return None
+
 @st.cache_resource(show_spinner=False)
 def get_llm():
     try:
         return LLM()
+    except:
+        return None
+
+@st.cache_resource(show_spinner=False)
+def get_tts():
+    try:
+        return TTS(voice="female_warm", rate="-5%")
     except:
         return None
 
@@ -171,6 +226,20 @@ def reset():
     st.session_state.state = 'idle'
     st.session_state.messages = []
     st.session_state.start_time = None
+    st.session_state.last_audio = None
+    st.session_state.tts_audio = None
+
+def synthesize_and_play(text):
+    """TTS 합성 후 재생 준비"""
+    tts = get_tts()
+    if tts and text:
+        try:
+            audio = asyncio.run(tts.synthesize(text))
+            if audio:
+                st.session_state.tts_audio = audio
+                st.session_state.tts_key += 1
+        except Exception as e:
+            print(f"TTS 오류: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 화면
@@ -212,6 +281,8 @@ def page_ringing():
             if llm:
                 greeting = llm.get_greeting()
                 st.session_state.messages.append({'role': 'ai', 'text': greeting})
+                # 인사말 TTS
+                synthesize_and_play(greeting)
             st.session_state.state = 'call'
             st.rerun()
 
@@ -234,6 +305,9 @@ def page_call():
         </div>
     ''', unsafe_allow_html=True)
     
+    # AI 상태
+    st.markdown('<div class="ai-state">💬 마이크를 누르고 말씀하세요</div>', unsafe_allow_html=True)
+    
     # 대화
     html = []
     for m in st.session_state.messages[-6:]:
@@ -244,188 +318,64 @@ def page_call():
             html.append(f'<div class="msg msg-ai"><div class="msg-label">🤖 하이</div><div class="bubble bubble-ai">{t}</div></div>')
     st.markdown(f'<div class="chat">{"".join(html)}</div>', unsafe_allow_html=True)
     
-    # 마지막 AI 메시지 (TTS용) - 백틱 이스케이프 처리
-    last_ai = ""
-    if st.session_state.messages and st.session_state.messages[-1]['role'] == 'ai':
-        last_ai = st.session_state.messages[-1]['text']
-    last_ai_escaped = escape(last_ai).replace("`", "'")
+    # 마이크 버튼
+    audio_bytes = audio_recorder(
+        text="",
+        recording_color="#ef4444",
+        neutral_color="#22c55e",
+        icon_name="microphone",
+        icon_size="3x",
+        pause_threshold=2.0,
+        sample_rate=16000,
+        key="mic"
+    )
     
-    # ═══════════════════════════════════════════════════════════════════
-    # 음성 UI (components.html 사용)
-    # ═══════════════════════════════════════════════════════════════════
-    speech_html = f'''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; font-family: 'Noto Sans KR', sans-serif; }}
-            body {{ background: transparent; text-align: center; padding: 10px; }}
-            .state {{ font-size: 14px; color: #9ca3af; margin-bottom: 8px; }}
-            .state.listening {{ color: #3b82f6; }}
-            .state.thinking {{ color: #a855f7; }}
-            .state.speaking {{ color: #22c55e; }}
-            .live {{ color: #60a5fa; font-size: 13px; min-height: 18px; margin-bottom: 12px; }}
-            .mic {{
-                width: 80px; height: 80px;
-                border-radius: 50%; border: none;
-                background: linear-gradient(135deg, #22c55e, #16a34a);
-                box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
-                cursor: pointer; transition: all 0.2s;
-                display: inline-flex; align-items: center; justify-content: center;
-            }}
-            .mic:hover {{ transform: scale(1.05); }}
-            .mic.on {{
-                background: linear-gradient(135deg, #ef4444, #dc2626);
-                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
-                animation: pulse 1s ease-in-out infinite;
-            }}
-            @keyframes pulse {{
-                0%,100% {{ box-shadow: 0 6px 20px rgba(239,68,68,0.4); }}
-                50% {{ box-shadow: 0 10px 28px rgba(239,68,68,0.6); }}
-            }}
-            .mic svg {{ width: 36px; height: 36px; fill: white; }}
-            .hint {{ color: #6b7280; font-size: 12px; margin-top: 10px; }}
-        </style>
-    </head>
-    <body>
-        <div class="state" id="state">💬 마이크를 누르고 말씀하세요</div>
-        <div class="live" id="live"></div>
-        <button class="mic" id="mic" onclick="toggle()">
-            <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
-        </button>
-        <div class="hint">버튼을 누르고 말씀하세요</div>
+    st.markdown('<div class="hint">버튼을 누르고 말씀하세요</div>', unsafe_allow_html=True)
+    
+    # 음성 처리
+    if audio_bytes and audio_bytes != st.session_state.last_audio:
+        st.session_state.last_audio = audio_bytes
         
-        <script>
-            let rec = null, on = false, txt = '';
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-            
-            if (SR) {{
-                rec = new SR();
-                rec.lang = 'ko-KR';
-                rec.continuous = true;
-                rec.interimResults = true;
-                
-                rec.onresult = e => {{
-                    let tmp = '';
-                    for (let i = e.resultIndex; i < e.results.length; i++) {{
-                        if (e.results[i].isFinal) txt += e.results[i][0].transcript;
-                        else tmp += e.results[i][0].transcript;
-                    }}
-                    document.getElementById('live').textContent = txt + tmp;
-                }};
-                
-                rec.onend = () => {{
-                    if (on) {{
-                        try {{ rec.start(); }} catch(e) {{}}
-                    }} else if (txt.trim()) {{
-                        send(txt.trim());
-                    }}
-                }};
-                
-                rec.onerror = e => {{
-                    console.log('STT 오류:', e.error);
-                    on = false;
-                    document.getElementById('mic').classList.remove('on');
-                    document.getElementById('state').textContent = '⚠️ 음성 인식 오류 - 텍스트로 입력하세요';
-                }};
-            }} else {{
-                document.getElementById('state').textContent = '⚠️ 음성 인식 미지원 - 텍스트로 입력하세요';
-            }}
-            
-            function toggle() {{
-                if (!rec) return;
-                if (on) stop(); else start();
-            }}
-            
-            function start() {{
-                on = true; txt = '';
-                document.getElementById('mic').classList.add('on');
-                document.getElementById('state').textContent = '👂 듣고 있어요...';
-                document.getElementById('state').className = 'state listening';
-                document.getElementById('live').textContent = '';
-                try {{ rec.start(); }} catch(e) {{ console.log(e); }}
-            }}
-            
-            function stop() {{
-                on = false;
-                document.getElementById('mic').classList.remove('on');
-                document.getElementById('state').textContent = '🧠 생각하고 있어요...';
-                document.getElementById('state').className = 'state thinking';
-                try {{ rec.stop(); }} catch(e) {{}}
-            }}
-            
-            function send(t) {{
-                // 부모 창의 URL 변경
-                const url = new URL(window.parent.location.href);
-                url.searchParams.set('q', encodeURIComponent(t));
-                window.parent.location.href = url.toString();
-            }}
-            
-            // TTS
-            function speak(t) {{
-                if (!t || !window.speechSynthesis) return;
-                speechSynthesis.cancel();
-                const u = new SpeechSynthesisUtterance(t);
-                u.lang = 'ko-KR';
-                u.rate = 0.9;
-                const v = speechSynthesis.getVoices().find(x => x.lang.includes('ko'));
-                if (v) u.voice = v;
-                u.onstart = () => {{
-                    document.getElementById('state').textContent = '🗣️ 말하고 있어요...';
-                    document.getElementById('state').className = 'state speaking';
-                }};
-                u.onend = () => {{
-                    document.getElementById('state').textContent = '💬 마이크를 누르고 말씀하세요';
-                    document.getElementById('state').className = 'state';
-                }};
-                speechSynthesis.speak(u);
-            }}
-            
-            // TTS 실행
-            if (window.speechSynthesis) {{
-                const lastMsg = `{last_ai_escaped}`;
-                speechSynthesis.onvoiceschanged = () => speak(lastMsg);
-                if (speechSynthesis.getVoices().length) speak(lastMsg);
-                setTimeout(() => speak(lastMsg), 300);
-            }}
-        </script>
-    </body>
-    </html>
-    '''
-    
-    components.html(speech_html, height=200)
-    
-    # ═══════════════════════════════════════════════════════════════════
-    # 텍스트 입력 (음성 안 될 때 대안)
-    # ═══════════════════════════════════════════════════════════════════
-    st.markdown("<p style='color:#6b7280;font-size:12px;text-align:center;margin-top:8px;'>음성이 안 되면 아래에 입력하세요</p>", unsafe_allow_html=True)
-    
-    text_input = st.text_input("메시지 입력", placeholder="여기에 입력하고 Enter...", label_visibility="collapsed", key="text_msg")
-    
-    if text_input:
-        st.session_state.messages.append({'role': 'user', 'text': text_input})
+        stt = get_stt()
         llm = get_llm()
-        if llm:
-            resp = llm.generate(text_input)
-            if resp:
-                st.session_state.messages.append({'role': 'ai', 'text': resp})
+        
+        if stt and llm:
+            # STT
+            text = stt.transcribe(audio_bytes, mime_type="audio/wav")
+            
+            if text:
+                st.session_state.messages.append({'role': 'user', 'text': text})
+                
+                # LLM
+                response = llm.generate(text)
+                if response:
+                    st.session_state.messages.append({'role': 'ai', 'text': response})
+                    # TTS
+                    synthesize_and_play(response)
+        
         st.rerun()
     
-    # URL 파라미터로 들어온 음성 입력 처리
-    q = st.query_params.get('q', '')
-    if q:
-        import urllib.parse
-        text = urllib.parse.unquote(q)
-        st.session_state.messages.append({'role': 'user', 'text': text})
+    # TTS 오디오 재생 (autoplay)
+    if st.session_state.tts_audio:
+        audio_b64 = base64.b64encode(st.session_state.tts_audio).decode()
         
-        llm = get_llm()
-        if llm:
-            resp = llm.generate(text)
-            if resp:
-                st.session_state.messages.append({'role': 'ai', 'text': resp})
+        # JavaScript로 자동 재생
+        st.markdown(f'''
+            <audio id="tts-{st.session_state.tts_key}" autoplay>
+                <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
+            </audio>
+            <script>
+                var audio = document.getElementById("tts-{st.session_state.tts_key}");
+                if (audio) {{
+                    audio.play().catch(function(e) {{
+                        console.log("Autoplay blocked:", e);
+                    }});
+                }}
+            </script>
+        ''', unsafe_allow_html=True)
         
-        st.query_params.clear()
-        st.rerun()
+        # 재생 후 초기화
+        st.session_state.tts_audio = None
     
     # 종료 버튼
     c1, c2, c3 = st.columns([1, 2, 1])

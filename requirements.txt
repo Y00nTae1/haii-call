@@ -1,13 +1,21 @@
 # ═══════════════════════════════════════════
 # Haii-Call 의존성 패키지
-# Web Speech API 버전 (경량화)
 # ═══════════════════════════════════════════
 
 # AI - 대화 생성
 google-generativeai==0.8.3
 
+# STT - 음성 인식
+deepgram-sdk==3.7.7
+
+# TTS - 음성 합성  
+edge-tts==6.1.12
+
 # UI
 streamlit==1.40.1
+
+# 오디오 녹음
+audio-recorder-streamlit==0.0.10
 
 # 유틸리티
 python-dotenv==1.0.1

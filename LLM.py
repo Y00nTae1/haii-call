@@ -9,6 +9,21 @@ import google.generativeai as genai
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [LLM] %(message)s')
 logger = logging.getLogger(__name__)
 
+
+def get_api_key(key_name: str) -> Optional[str]:
+    """Streamlit Secrets 또는 환경변수에서 API 키 로드"""
+    # 1. Streamlit Secrets 시도 (Cloud 배포용)
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and key_name in st.secrets:
+            return st.secrets[key_name]
+    except Exception:
+        pass
+    
+    # 2. 환경변수 시도 (로컬 개발용)
+    return os.getenv(key_name)
+
+
 # 시스템 프롬프트
 SYSTEM_PROMPT = """당신은 '하이'라는 이름의 AI 건강 도우미입니다.
 76세 독거 어르신과 전화 통화를 하고 있습니다.
@@ -45,7 +60,7 @@ class LLM:
         Args:
             api_key: Google API 키
         """
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
+        self.api_key = api_key or get_api_key("GOOGLE_API_KEY")
         
         if not self.api_key:
             logger.error("GOOGLE_API_KEY가 설정되지 않았습니다")

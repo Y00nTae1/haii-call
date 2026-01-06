@@ -11,15 +11,29 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [STT] %(message)s')
 logger = logging.getLogger(__name__)
 
 
+def get_api_key(key_name: str) -> Optional[str]:
+    """Streamlit Secrets 또는 환경변수에서 API 키 로드"""
+    # 1. Streamlit Secrets 시도 (Cloud 배포용)
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and key_name in st.secrets:
+            return st.secrets[key_name]
+    except Exception:
+        pass
+    
+    # 2. 환경변수 시도 (로컬 개발용)
+    return os.getenv(key_name)
+
+
 class STT:
     """Deepgram 음성 인식"""
     
     def __init__(self, api_key: Optional[str] = None):
         """
         Args:
-            api_key: Deepgram API 키 (없으면 환경변수에서 로드)
+            api_key: Deepgram API 키 (없으면 환경변수/Secrets에서 로드)
         """
-        self.api_key = api_key or os.getenv("DEEPGRAM_API_KEY")
+        self.api_key = api_key or get_api_key("DEEPGRAM_API_KEY")
         
         if not self.api_key:
             logger.warning("DEEPGRAM_API_KEY가 설정되지 않았습니다")

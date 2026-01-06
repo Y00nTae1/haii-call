@@ -714,15 +714,10 @@ def render_connected():
         process_audio(audio_bytes)
         st.rerun()
     
-    # TTS 오디오 자동 재생 (브라우저)
+    # TTS 오디오 재생 (st.audio 사용 - 브라우저 호환)
     if st.session_state.tts_audio:
-        audio_b64 = base64.b64encode(st.session_state.tts_audio).decode()
-        st.markdown(f'''
-            <audio autoplay>
-                <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
-            </audio>
-        ''', unsafe_allow_html=True)
-        st.session_state.tts_audio = None  # 재생 후 초기화
+        st.audio(st.session_state.tts_audio, format="audio/mp3", autoplay=True)
+        st.session_state.tts_audio = None
     
     # 종료 버튼
     col1, col2, col3 = st.columns([1, 2, 1])
